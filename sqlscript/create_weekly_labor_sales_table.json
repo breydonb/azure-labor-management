@@ -1,0 +1,17 @@
+{
+	"name": "create_weekly_labor_sales_table",
+	"properties": {
+		"content": {
+			"query": "CREATE TABLE WEEKLY_LABOR_SALES \n(\n    PeriodID VARCHAR(50) NOT NULL,\n    SalesPerWeek DECIMAL(10, 2) NOT NULL,\n    LaborCostPerWeek DECIMAL(10, 2) NOT NULL\n) \nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\nGO;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "SQLPOOL1",
+				"poolName": "SQLPOOL1"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

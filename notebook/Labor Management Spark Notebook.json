@@ -1,0 +1,273 @@
+{
+	"name": "Labor Management Spark Notebook",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "addd7d93-b4e9-41f6-a9ca-3b093bfc43a8"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/e1996fba-9acc-435f-9964-b30d308ca0c9/resourceGroups/labor-analysis/providers/Microsoft.Synapse/workspaces/laborsynapse/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://laborsynapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 4,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Labor Management Spark Notebook\r\n",
+					"To start, the way I am doing this is to aid in my Azure Data Engineer Associate Certification to further my career in big data. I'm going to be trying a lot of new things (Scala, Spark, Data Lakes, etc.) to hopefully create a scalable ML platform to track trends in the data.\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Creating the Apache Spark Machine learning model\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"microsoft": {
+						"language": "python"
+					},
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"%%pyspark\r\n",
+					"df = spark.read.load('abfss://data@labordatalake.dfs.core.windows.net/dbo/weekly_labor_sales/weekly_sales_labor_breakdown.csv', format='csv'\r\n",
+					"## If header exists uncomment line below\r\n",
+					", header=True\r\n",
+					")\r\n",
+					"display(df.limit(10))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"run_control": {
+						"frozen": false
+					},
+					"editable": true,
+					"microsoft": {
+						"language": "sparksql"
+					},
+					"collapsed": false
+				},
+				"source": [
+					"%%sql\r\n",
+					"DROP TABLE IF EXISTS dbo.weekly_labor_sales;\r\n",
+					"\r\n",
+					"CREATE EXTERNAL TABLE dbo.weekly_labor_sales (\r\n",
+					"    TimeFrame STRING NOT NULL,\r\n",
+					"    SalesPerWeek DECIMAL(10, 2) NOT NULL,\r\n",
+					"    LaborCostPerWeek DECIMAL(10, 2) NOT NULL\r\n",
+					")\r\n",
+					"USING CSV\r\n",
+					"OPTIONS (\r\n",
+					"    path 'abfss://data@labordatalake.dfs.core.windows.net/dbo/weekly_labor_sales/weekly_sales_labor_breakdown.csv',\r\n",
+					"    header 'true',\r\n",
+					"    delimiter ',',\r\n",
+					"    quote '\"',\r\n",
+					"    inferSchema 'true'\r\n",
+					");\r\n",
+					"SELECT * FROM dbo.weekly_labor_sales\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"microsoft": {
+						"language": "python"
+					},
+					"collapsed": false
+				},
+				"source": [
+					"%%pyspark\r\n",
+					"from pyspark.sql import SparkSession\r\n",
+					"from pyspark.ml.feature import VectorAssembler\r\n",
+					"from pyspark.ml.regression import LinearRegression\r\n",
+					"from pyspark.ml.evaluation import RegressionEvaluator\r\n",
+					"\r\n",
+					"spark = SparkSession.builder.appName(\"LinearRegression\").getOrCreate();\r\n",
+					"\r\n",
+					"df = spark.read.load('abfss://data@labordatalake.dfs.core.windows.net/dbo/weekly_labor_sales/weekly_sales_labor_breakdown.csv', \r\n",
+					"    format = 'csv',\r\n",
+					"    header = True,\r\n",
+					"    inferSchema = True\r\n",
+					")\r\n",
+					"\r\n",
+					"# Assemble the features into a single vector column\r\n",
+					"assembler = VectorAssembler(inputCols=[\"Labor cost per week\"], outputCol=\"features\")\r\n",
+					"df = assembler.transform(df)\r\n",
+					"\r\n",
+					"df = df.select(\"features\", \"Sales Per Week\")\r\n",
+					"\r\n",
+					"train_data, test_data = df.randomSplit([0.8, 0.2], seed=1234)\r\n",
+					"\r\n",
+					"lr = LinearRegression(labelCol=\"Sales Per Week\", featuresCol = \"features\")\r\n",
+					"\r\n",
+					"lr_model = lr.fit(train_data)\r\n",
+					"\r\n",
+					"# Predictions on test data\r\n",
+					"predictions = lr_model.transform(test_data)\r\n",
+					"\r\n",
+					"# Evaluate the Root Mean Squared Error (How far the predictions are) and the R-squared (explains variance in the target variable)\r\n",
+					"evaluator = RegressionEvaluator(labelCol=\"Sales Per Week\", predictionCol=\"prediction\", metricName=\"rmse\")\r\n",
+					"rmse = evaluator.evaluate(predictions)\r\n",
+					"print(f\"Root Mean Squared Error (RMSE): {rmse}\")\r\n",
+					"\r\n",
+					"evaluator_r2 = RegressionEvaluator(labelCol=\"Sales Per Week\", predictionCol=\"prediction\", metricName=\"r2\")\r\n",
+					"r2 = evaluator_r2.evaluate(predictions)\r\n",
+					"print(f\"R-Squared (R2): {r2}\")\r\n",
+					"\r\n",
+					"print(f\"Coefficients: {lr_model.coefficients}\")\r\n",
+					"print(f\"Intercept: {lr_model.intercept}\")\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"import pandas as pd\r\n",
+					"import matplotlib.pyplot as plt\r\n",
+					"import seaborn as sns\r\n",
+					"\r\n",
+					"df = pd.read_csv('abfss://data@labordatalake.dfs.core.windows.net/dbo/weekly_labor_sales/weekly_sales_labor_breakdown.csv')\r\n",
+					"\r\n",
+					"df[\"Labor cost per week\"] = pd.to_numeric(df[\"Labor cost per week\"], errors=\"coerce\")\r\n",
+					"df[\"Sales Per Week\"] = pd.to_numeric(df[\"Sales Per Week\"], errors=\"coerce\")\r\n",
+					"\r\n",
+					"# Create scatter plot\r\n",
+					"plt.figure(figsize=(8, 6))\r\n",
+					"sns.regplot(x = df[\"Labor cost per week\"], y = df[\"Sales Per Week\"], scatter_kws={\"color\" : \"blue\"}, line_kws={\"color\" : \"red\"})\r\n",
+					"\r\n",
+					"plt.xlabel(\"Labor cost per week\")\r\n",
+					"plt.ylabel(\"Sales Per Week\")\r\n",
+					"plt.title(\"Scatter Plot of Labor Cost vs Sales Per Week\")\r\n",
+					"\r\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Meaning behind the Regression\r\n",
+					"For right now, I only have 9 data points, going by weekly sales. There is visibly a lot of error and no correlation right now. We need a lot more data sets to properly predict the amount of values (specifically $N≥10×P$, where N is the data points and P is the independent variables (so ideally 30 would give us a rough estimate))\r\n",
+					"\r\n",
+					"More over, the highlighted red space is considered our confidence in the model, which is too broad. Leading to question whether or not the data follows a normal distribution:"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from scipy import stats\r\n",
+					"\r\n",
+					"# Performing a Shapiro-Wilk Test to test for null or alternative hypothesis\r\n",
+					"stat, p_value = stats.shapiro(df[\"Labor cost per week\"])\r\n",
+					"print(f'Statistic: {stat}, p-value {p_value}')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Different Testing for Performance\r\n",
+					"It is important to keep in mind that determining the performance and overall assumption is the goal here. So we need to take into consideration how the model behaves. Below are going to be lists of tests ran along with why we are running it."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"## Breusch-Pagan Test\r\n",
+					"## Formal statistical test for homoscedasticity, or the variance of residual data points is dependent on the independent variables\r\n",
+					"\r\n",
+					"import statsmodel.api as sm\r\n",
+					"import statsmodel.stats.api as sms\r\n",
+					"\r\n",
+					"\r\n",
+					"model = sm.OLS(df[\"Sales Per Week\"], sm.add_constant(df[\"Labor cost per week\"])).fit()\r\n",
+					"\r\n",
+					"test = sms.het_breuschpagan(model.resid, model.model.exog)\r\n",
+					"print(f'Breusch Pagan p-value: {test[1]}')"
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,25 @@
+{
+	"name": "dbo",
+	"properties": {
+		"Name": "dbo",
+		"EntityType": "DATABASE",
+		"Origin": {
+			"Type": "SPARK"
+		},
+		"Properties": {
+			"IsSyMSCDMDatabase": true
+		},
+		"Source": {
+			"Provider": "ADLS",
+			"Location": "abfss://data@labordatalake.dfs.core.windows.net/dbo",
+			"Properties": {
+				"FormatType": "parquet",
+				"LinkedServiceName": "AzureDataLakeStorage1"
+			}
+		},
+		"PublishStatus": "PUBLISHED",
+		"ObjectVersion": 5,
+		"ObjectId": "a14f2031-3f6d-4e30-b6b7-3231fee03946"
+	},
+	"type": "DATABASE"
+}
